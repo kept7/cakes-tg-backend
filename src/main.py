@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 from pydantic import BaseModel
 
+
 app = FastAPI()
+
 
 class NewOrder(BaseModel):
     tg_username: str
@@ -10,12 +12,14 @@ class NewOrder(BaseModel):
     creation_date: str
     order_status: str
 
+
 class OrderInfo(BaseModel):
     type: str
     shape: str
     flavour: str
     confi: str
     design: str
+
 
 orders = [
     {
@@ -65,6 +69,13 @@ orders_info = [
     },
 ]
 
+# TODO: complete this func
+"""
+TODO:
+    complete read_orders_info func
+    change create_order func
+"""
+
 
 @app.get(
     "/orders",
@@ -81,7 +92,9 @@ def read_orders(username: str):
     if len(orders_list):
         return orders_list
     else:
-        raise HTTPException(status_code=404, detail="This user has not placed an order yet")
+        raise HTTPException(
+            status_code=404, detail="This user has not placed an order yet"
+        )
 
 
 @app.get(
@@ -93,7 +106,9 @@ def read_orders_info(username: str):
     try:
         orders_list = read_orders(username)
     except HTTPException:
-        raise HTTPException(status_code=404, detail="This user has not placed an order yet")
+        raise HTTPException(
+            status_code=404, detail="This user has not placed an order yet"
+        )
 
     user_orders_list = []
     for id_order in orders_list:
@@ -116,11 +131,7 @@ def get_order(order_id: int):
     raise HTTPException(status_code=404, detail="Order not found")
 
 
-@app.post(
-    "/orders",
-    tags=["Заказы"],
-    summary="Добавить заказ"
-)
+@app.post("/orders", tags=["Заказы"], summary="Добавить заказ")
 def create_order(new_order: OrderInfo):
     orders_info.append(
         {
