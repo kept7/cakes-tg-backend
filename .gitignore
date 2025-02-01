@@ -5,3 +5,7 @@ venv/
 
 # Byte-compiled
 __pycache__/
+
+test_data.txt
+
+*.db

@@ -1,18 +1,52 @@
-from fastapi import FastAPI, HTTPException
+import asyncio
+from typing import Annotated
+
+from fastapi import FastAPI, HTTPException, Depends
+
 import uvicorn
+
 from pydantic import BaseModel, Field, ConfigDict
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 app = FastAPI()
 
-class OrderInfo(BaseModel):
+
+class Base(DeclarativeBase): ...
+
+
+class OrderInfoModel(Base):
+    __tablename__ = "orders_info"
+
+    order_id: Mapped[int] = mapped_column(primary_key=True)
+    tg_id: Mapped[int]
+    tg_username: Mapped[str]
+    date: Mapped[str]
+    status: Mapped[str]
+
+
+class OrderDataModel(Base):
+    __tablename__ = "orders_data"
+
+    order_id: Mapped[int] = mapped_column(primary_key=True)
+    type: Mapped[str]
+    shape: Mapped[str]
+    flavour: Mapped[str]
+    confi: Mapped[str]
+    design: Mapped[str]
+
+
+class OrderInfoAddSchema(BaseModel):
     tg_id: int
     tg_username: str
     creation_date: str
     order_status: str
 
 
-class OrderData(BaseModel):
+class OrderDataAddSchema(BaseModel):
     type: str
     shape: str
     flavour: str
@@ -20,141 +54,184 @@ class OrderData(BaseModel):
     design: str = Field(max_length=1000)
 
 
-class OrderSchema(OrderData, OrderInfo):
+class OrderSchema(OrderDataAddSchema, OrderInfoAddSchema):
     model_config = ConfigDict(extra="forbid")
 
 
-orders_info = [
-    {
-        "order_id": 1001,
-        "tg_id": 1657854937958,
-        "tg_username": "@kept7",
-        "date": "12, January 2023",
-        "status": "Completed",
-    },
-    {
-        "order_id": 1002,
-        "tg_id": 4698678923409230,
-        "tg_username": "@hadron",
-        "date": "24, January 2024",
-        "status": "Delivery",
-    },
-    {
-        "order_id": 1003,
-        "tg_id": 1657854937958,
-        "tg_username": "@kept7",
-        "date": "8, February 2024",
-        "status": "Created",
-    },
-]
 
-orders_data = [
-    {
-        "order_id": 1001,
-        "type": "bento",
-        "shape": "round",
-        "flavour": "salty-caramel",
-        "confi": "",
-        "design": "Green color, nothing else",
-    },
-    {
-        "order_id": 1002,
-        "type": "cake > 1 kg",
-        "shape": "",
-        "flavour": "red-velvet",
-        "confi": "strawberry",
-        "design": "fjdsfsdhfjsdhfsj",
-    },
-    {
-        "order_id": 1003,
-        "type": "cake to go",
-        "shape": "heart",
-        "flavour": "red-velvet",
-        "confi": "cherry",
-        "design": "my name is my name is slimshady",
-    },
-]
+# def create_engine(bd_name: str):
+#     engine = create_async_engine(f"sqlite+aiosqlite:///{bd_name}.db")
+#     new_session = async_sessionmaker(engine, expire_on_commit=False)
+#     return engine, new_session
 
-"""
-TODO:
-    complete read_orders_info func
-    change create_order func
-"""
+# engine_order_info_db, new_session_order_info_db = create_engine("orders_info")
+# engine_order_data_db, new_session_order_data_db = create_engine("orders_data")
+
+# async def get_session_order_info_db():
+#     async with new_session_order_info_db() as session_order_info_db:
+#         yield session_order_info_db
+#
+# async def get_session_order_data_db():
+#     async with new_session_order_data_db() as session_order_data_db:
+#         yield session_order_data_db
+#
+# SessionDep_order_info_db = Annotated[AsyncSession, Depends(get_session_order_info_db)]
+# SessionDep_order_data_db = Annotated[AsyncSession, Depends(get_session_order_data_db)]
 
 
-@app.get(
-    "/orders",
-    tags=["Заказы"],
-    summary="Получить информацию о всех заказах конкретного пользователя",
-)
-def read_orders_info(user_id: int):
-    orders_list = []
 
-    for order in orders_info:
-        if order["tg_id"] == user_id:
-            orders_list.append(order)
+engine = create_async_engine("sqlite+aiosqlite:///orders_info.db")
+new_session = async_sessionmaker(engine, expire_on_commit=False)
 
-    if orders_list:
-        return orders_list
+async def get_session():
+    async with new_session() as session:
+        yield session
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+async def setup_database():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+async def drop_database():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+
+engine_2 = create_async_engine("sqlite+aiosqlite:///orders_data.db")
+new_session_2 = async_sessionmaker(engine_2, expire_on_commit=False)
+
+async def get_session_2():
+    async with new_session_2() as session_2:
+        yield session_2
+
+SessionDep_2 = Annotated[AsyncSession, Depends(get_session_2)]
+
+async def setup_database_2():
+    async with engine_2.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+async def drop_database_2():
+    async with engine_2.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+
+
+
+async def add_order_info(order: OrderSchema, session: SessionDep):
+    new_order_info = OrderInfoModel(
+        tg_id=order.tg_id,
+        tg_username=order.tg_username,
+        date=order.creation_date,
+        status=order.order_status,
+    )
+    session.add(new_order_info)
+    await session.commit()
+    return True
+
+
+async def add_order_data(order: OrderSchema, session_2: SessionDep_2):
+    new_order_data = OrderDataModel(
+        type=order.type,
+        shape=order.shape,
+        flavour=order.flavour,
+        confi=order.confi,
+        design=order.design,
+    )
+    session_2.add(new_order_data)
+    await session_2.commit()
+    return True
+
+
+@app.post("/orders/info", tags=["Заказы"], summary="Добавить заказ")
+async def add_order(order: OrderSchema, session: SessionDep, session_2: SessionDep_2):
+    if await add_order_info(order, session) and await add_order_data(order, session_2):
+        return {"ok": True, "msg": "Order was created"}
     else:
-        raise HTTPException(
-            status_code=404, detail="This user has not placed an order yet"
-        )
+        raise HTTPException(status_code=400, detail="Failed to create order")
 
 
 @app.get(
     "/orders/info",
     tags=["Заказы"],
-    summary="Получить детали всех заказов конкретного пользователя",
+    summary="Получить информацию о всех заказах конкретного пользователя",
 )
-def read_orders_data(user_id: int):
-    orders_list = read_orders_info(user_id)
+async def get_orders_info(user_id: int, session: SessionDep):
+    query = select(OrderInfoModel)
+    result = await session.execute(query)
 
-    user_orders_list = []
-    for order in orders_list:
-        for ord_info in orders_data:
-            if ord_info["order_id"] == order["order_id"]:
-                user_orders_list.append(ord_info)
-
-    return user_orders_list
+    orders_info_list = []
+    for order_info in result.scalars().all():
+        if order_info.tg_id == user_id:
+            orders_info_list.append(order_info)
+    return orders_info_list
 
 
 @app.get(
-    "/orders/{order_id}",
+    "/orders/data",
     tags=["Заказы"],
-    summary="Получить конкретный заказ",
+    summary="Получить детали всех заказов конкретного пользователя",
 )
-def get_order_info(order_id: int):
-    for ord_info in orders_data:
-        if ord_info["order_id"] == order_id:
-            return ord_info
-    raise HTTPException(status_code=404, detail="Order not found")
+async def get_orders_data(user_id: int, session: SessionDep, session_2: SessionDep_2):
+    orders_info_list = await get_orders_info(user_id, session)
+
+    query = select(OrderDataModel)
+    result = await session_2.execute(query)
+
+    result_list = result.scalars().all()
+    orders_data_list = []
+
+    for order_info in orders_info_list:
+        for order_data in result_list:
+            if order_info.order_id == order_data.order_id:
+                orders_data_list.append(order_data)
+
+    # order_data_dict = {order_data.order_id: order_data for order_data in order_data_list}
+    #
+    # orders_data_list = [order_data_dict[order_info.order_id] for order_info in orders_info_list if
+    #                     order_info.order_id in order_data_dict]
+
+    return orders_data_list
 
 
-@app.post("/orders", tags=["Заказы"], summary="Добавить заказ")
-def create_order(new_order: OrderSchema):
-    new_order_id = orders_info[-1]["order_id"] + 1
+@app.get(
+    "/orders/info/{order_id}",
+    tags=["Заказы"],
+    summary="Получить информацию о конкретном заказе",
+)
+async def get_order_info(order_id: int, session: SessionDep):
+    query = select(OrderInfoModel)
+    result = await session.execute(query)
 
-    orders_info.append({
-        "order_id": new_order_id,
-        "tg_id": new_order.tg_id,
-        "tg_username": new_order.tg_username,
-        "date": new_order.creation_date,
-        "status": new_order.order_status,
-    })
+    for order_info in result.scalars().all():
+        if order_info.order_id == order_id:
+            return order_info
+    raise HTTPException(status_code=404, detail="Order doesn't exist")
 
-    orders_data.append(
-        {
-            "order_id": new_order_id,
-            "type": new_order.type,
-            "shape": new_order.shape,
-            "flavour": new_order.flavour,
-            "confi": new_order.confi,
-            "design": new_order.design,
-        }
-    )
-    return {"ok": True, "msg": "Order was created"}
+
+@app.get(
+    "/orders/data/{order_id}",
+    tags=["Заказы"],
+    summary="Получить данные о конкретном заказе",
+)
+async def get_order_data(order_id: int, session_2: SessionDep_2):
+    query = select(OrderDataModel)
+    result = await session_2.execute(query)
+
+    for order_data in result.scalars().all():
+        if order_data.order_id == order_id:
+            return order_data
+    raise HTTPException(status_code=404, detail="Order doesn't exist")
+
+
+async def main():
+    # await drop_database()
+    # await drop_database_2()
+    await setup_database()
+    await setup_database_2()
 
 
 if __name__ == "__main__":
+    asyncio.run(main())
     uvicorn.run("main:app", reload=True)
