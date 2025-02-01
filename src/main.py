@@ -1,50 +1,56 @@
 from fastapi import FastAPI, HTTPException
 import uvicorn
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
 
 
 app = FastAPI()
 
-
-class NewOrder(BaseModel):
+class OrderInfo(BaseModel):
+    tg_id: int
     tg_username: str
-    id: int
     creation_date: str
     order_status: str
 
 
-class OrderInfo(BaseModel):
+class OrderData(BaseModel):
     type: str
     shape: str
     flavour: str
     confi: str
-    design: str
+    design: str = Field(max_length=1000)
 
 
-orders = [
+class OrderSchema(OrderData, OrderInfo):
+    model_config = ConfigDict(extra="forbid")
+
+
+orders_info = [
     {
+        "order_id": 1001,
+        "tg_id": 1657854937958,
         "tg_username": "@kept7",
-        "id": 1,
         "date": "12, January 2023",
         "status": "Completed",
     },
     {
-        "tg_username": "@hadrizi",
-        "id": 2,
+        "order_id": 1002,
+        "tg_id": 4698678923409230,
+        "tg_username": "@hadron",
         "date": "24, January 2024",
         "status": "Delivery",
     },
     {
+        "order_id": 1003,
+        "tg_id": 1657854937958,
         "tg_username": "@kept7",
-        "id": 3,
         "date": "8, February 2024",
         "status": "Created",
     },
 ]
 
-orders_info = [
+orders_data = [
     {
-        "id": 1,
+        "order_id": 1001,
         "type": "bento",
         "shape": "round",
         "flavour": "salty-caramel",
@@ -52,7 +58,7 @@ orders_info = [
         "design": "Green color, nothing else",
     },
     {
-        "id": 2,
+        "order_id": 1002,
         "type": "cake > 1 kg",
         "shape": "",
         "flavour": "red-velvet",
@@ -60,7 +66,7 @@ orders_info = [
         "design": "fjdsfsdhfjsdhfsj",
     },
     {
-        "id": 3,
+        "order_id": 1003,
         "type": "cake to go",
         "shape": "heart",
         "flavour": "red-velvet",
@@ -69,7 +75,6 @@ orders_info = [
     },
 ]
 
-# TODO: complete this func
 """
 TODO:
     complete read_orders_info func
@@ -82,14 +87,14 @@ TODO:
     tags=["Заказы"],
     summary="Получить информацию о всех заказах конкретного пользователя",
 )
-def read_orders(username: str):
+def read_orders_info(user_id: int):
     orders_list = []
 
-    for order in orders:
-        if order["tg_username"] == username:
+    for order in orders_info:
+        if order["tg_id"] == user_id:
             orders_list.append(order)
 
-    if len(orders_list):
+    if orders_list:
         return orders_list
     else:
         raise HTTPException(
@@ -98,23 +103,18 @@ def read_orders(username: str):
 
 
 @app.get(
-    "/orders_info",
+    "/orders/info",
     tags=["Заказы"],
     summary="Получить детали всех заказов конкретного пользователя",
 )
-def read_orders_info(username: str):
-    try:
-        orders_list = read_orders(username)
-    except HTTPException:
-        raise HTTPException(
-            status_code=404, detail="This user has not placed an order yet"
-        )
+def read_orders_data(user_id: int):
+    orders_list = read_orders_info(user_id)
 
     user_orders_list = []
-    for id_order in orders_list:
-        for order in orders_info:
-            if order["id"] == id_order:
-                user_orders_list.append(order)
+    for order in orders_list:
+        for ord_info in orders_data:
+            if ord_info["order_id"] == order["order_id"]:
+                user_orders_list.append(ord_info)
 
     return user_orders_list
 
@@ -124,18 +124,28 @@ def read_orders_info(username: str):
     tags=["Заказы"],
     summary="Получить конкретный заказ",
 )
-def get_order(order_id: int):
-    for order in orders_info:
-        if order["id"] == order_id:
-            return order
+def get_order_info(order_id: int):
+    for ord_info in orders_data:
+        if ord_info["order_id"] == order_id:
+            return ord_info
     raise HTTPException(status_code=404, detail="Order not found")
 
 
 @app.post("/orders", tags=["Заказы"], summary="Добавить заказ")
-def create_order(new_order: OrderInfo):
-    orders_info.append(
+def create_order(new_order: OrderSchema):
+    new_order_id = orders_info[-1]["order_id"] + 1
+
+    orders_info.append({
+        "order_id": new_order_id,
+        "tg_id": new_order.tg_id,
+        "tg_username": new_order.tg_username,
+        "date": new_order.creation_date,
+        "status": new_order.order_status,
+    })
+
+    orders_data.append(
         {
-            "id": len(orders_info) + 1,
+            "order_id": new_order_id,
             "type": new_order.type,
             "shape": new_order.shape,
             "flavour": new_order.flavour,
