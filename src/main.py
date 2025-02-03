@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Depends
@@ -11,9 +12,22 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:8000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class Base(DeclarativeBase): ...
 
@@ -34,7 +48,7 @@ class OrderDataModel(Base):
     order_id: Mapped[int] = mapped_column(primary_key=True)
     type: Mapped[str]
     shape: Mapped[str]
-    flavour: Mapped[str]
+    filling: Mapped[str]
     confi: Mapped[str]
     design: Mapped[str]
 
@@ -42,14 +56,13 @@ class OrderDataModel(Base):
 class OrderInfoAddSchema(BaseModel):
     tg_id: int
     tg_username: str
-    creation_date: str
-    order_status: str
+    status: str
 
 
 class OrderDataAddSchema(BaseModel):
     type: str
     shape: str
-    flavour: str
+    filling: str
     confi: str
     design: str = Field(max_length=1000)
 
@@ -117,14 +130,13 @@ async def drop_database_2():
         await conn.run_sync(Base.metadata.drop_all)
 
 
-
-
 async def add_order_info(order: OrderSchema, session: SessionDep):
+    current_time = datetime.now().strftime("%d, %B %Y %H:%M")
     new_order_info = OrderInfoModel(
         tg_id=order.tg_id,
         tg_username=order.tg_username,
-        date=order.creation_date,
-        status=order.order_status,
+        date=current_time,
+        status=order.status,
     )
     session.add(new_order_info)
     await session.commit()
@@ -135,7 +147,7 @@ async def add_order_data(order: OrderSchema, session_2: SessionDep_2):
     new_order_data = OrderDataModel(
         type=order.type,
         shape=order.shape,
-        flavour=order.flavour,
+        filling=order.filling,
         confi=order.confi,
         design=order.design,
     )
@@ -144,6 +156,28 @@ async def add_order_data(order: OrderSchema, session_2: SessionDep_2):
     return True
 
 
+@app.get(
+    "/orders/info",
+    tags=["Заказы"],
+    summary="Получить ифнормацию о всех заказах",
+)
+async def get_all_orders(session: SessionDep, session_2: SessionDep_2):
+    query = select(OrderInfoModel)
+    result = await session.execute(query)
+
+    query_2 = select(OrderDataModel)
+    result_2 = await session_2.execute(query_2)
+
+    resultat = []
+    result = result.scalars().all()
+    result_2 = result_2.scalars().all()
+
+    for item1, item2 in zip(result, result_2):
+        combined_item = {**vars(item1), **vars(item2)}
+        resultat.append(combined_item)
+
+    return resultat
+
 @app.post("/orders/info", tags=["Заказы"], summary="Добавить заказ")
 async def add_order(order: OrderSchema, session: SessionDep, session_2: SessionDep_2):
     if await add_order_info(order, session) and await add_order_data(order, session_2):
@@ -151,30 +185,29 @@ async def add_order(order: OrderSchema, session: SessionDep, session_2: SessionD
     else:
         raise HTTPException(status_code=400, detail="Failed to create order")
 
-
-@app.get(
-    "/orders/info",
-    tags=["Заказы"],
-    summary="Получить информацию о всех заказах конкретного пользователя",
-)
-async def get_orders_info(user_id: int, session: SessionDep):
-    query = select(OrderInfoModel)
+'''
+Получить информацию о всех заказах пользователя
+'''
+async def get_orders_info(user_tg_id: int, session: SessionDep):
+    query = select(OrderInfoModel).filter(OrderInfoModel.tg_id == user_tg_id)
     result = await session.execute(query)
 
     orders_info_list = []
     for order_info in result.scalars().all():
-        if order_info.tg_id == user_id:
+        if order_info.tg_id == user_tg_id:
             orders_info_list.append(order_info)
-    return orders_info_list
+
+    if orders_info_list:
+        return orders_info_list
+    else:
+        raise HTTPException(status_code=404, detail="Orders not found")
 
 
-@app.get(
-    "/orders/data",
-    tags=["Заказы"],
-    summary="Получить детали всех заказов конкретного пользователя",
-)
-async def get_orders_data(user_id: int, session: SessionDep, session_2: SessionDep_2):
-    orders_info_list = await get_orders_info(user_id, session)
+'''
+Получить данные о всех заказах пользователя
+'''
+async def get_orders_data_info(user_tg_id: int, session: SessionDep, session_2: SessionDep_2):
+    orders_info_list = await get_orders_info(user_tg_id, session)
 
     query = select(OrderDataModel)
     result = await session_2.execute(query)
@@ -192,42 +225,69 @@ async def get_orders_data(user_id: int, session: SessionDep, session_2: SessionD
     # orders_data_list = [order_data_dict[order_info.order_id] for order_info in orders_info_list if
     #                     order_info.order_id in order_data_dict]
 
-    return orders_data_list
+    return orders_info_list, orders_data_list
 
 
 @app.get(
-    "/orders/info/{order_id}",
+"/orders/info/user/{user_tg_id}",
     tags=["Заказы"],
-    summary="Получить информацию о конкретном заказе",
+    summary="Получить информацию о всех заказах конкретного пользователя",
 )
+async def get_user_orders(user_tg_id: int, session: SessionDep, session_2: SessionDep_2):
+    orders_info_list, orders_data_list = await get_orders_data_info(user_tg_id, session, session_2)
+
+    all_orders = []
+
+    for item1, item2 in zip(orders_info_list, orders_data_list):
+        combined_item = {**vars(item1), **vars(item2)}
+        all_orders.append(combined_item)
+
+    return all_orders
+
+
+'''
+Получить информацию о конкретном заказе
+'''
 async def get_order_info(order_id: int, session: SessionDep):
-    query = select(OrderInfoModel)
+    query = select(OrderInfoModel).filter(OrderInfoModel.order_id == order_id)
     result = await session.execute(query)
+    order_info = result.scalars().first()
 
-    for order_info in result.scalars().all():
-        if order_info.order_id == order_id:
-            return order_info
-    raise HTTPException(status_code=404, detail="Order doesn't exist")
+    if order_info is not None:
+        return order_info
+    else:
+        raise HTTPException(status_code=404, detail="Order doesn't exist")
+
+
+'''
+Получить данные о конкретном заказе
+'''
+async def get_order_data(order_id: int, session_2: SessionDep_2):
+    query = select(OrderDataModel).filter(OrderDataModel.order_id == order_id)
+    result = await session_2.execute(query)
+    order_data = result.scalars().first()
+
+    if order_data is not None:
+        return order_data
+    else:
+        raise HTTPException(status_code=404, detail="Order doesn't exist")
 
 
 @app.get(
-    "/orders/data/{order_id}",
+"/orders/info/order/{order_id}",
     tags=["Заказы"],
-    summary="Получить данные о конкретном заказе",
+    summary="Получить информацию о всех заказах конкретного пользователя",
 )
-async def get_order_data(order_id: int, session_2: SessionDep_2):
-    query = select(OrderDataModel)
-    result = await session_2.execute(query)
+async def get_order(order_id: int, session: SessionDep, session_2: SessionDep_2):
+    order_info = await get_order_info(order_id, session)
+    order_data = await get_order_data(order_id, session_2)
 
-    for order_data in result.scalars().all():
-        if order_data.order_id == order_id:
-            return order_data
-    raise HTTPException(status_code=404, detail="Order doesn't exist")
+    return {**vars(order_info), **vars(order_data)}
 
 
 async def main():
-    # await drop_database()
-    # await drop_database_2()
+    await drop_database()
+    await drop_database_2()
     await setup_database()
     await setup_database_2()
 
