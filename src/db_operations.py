@@ -45,8 +45,16 @@ class DBInfoOperations:
         order_info = result.scalars().first()
 
         if order_info is None:
-            raise HTTPException(status_code=404, detail="Order doesn't exist")
+            raise HTTPException(status_code=404, detail="Order not found")
         return order_info
+
+    async def change_order_status(self, order_id, order_status) -> bool:
+        order_info = await self.get_order_info(order_id)
+
+        order_info.status = order_status
+        await self.session.commit()
+        await self.session.refresh(order_info)
+        return True
 
 
 class DBDataOperations:

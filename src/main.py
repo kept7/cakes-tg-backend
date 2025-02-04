@@ -1,7 +1,7 @@
 import asyncio
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, WebSocket
 
 from settings.config import settings
 
@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+clients = []
 
 origins = [
     settings.BASE_URL_1,
@@ -43,6 +45,22 @@ db_order_data_operator = DBDataOperations(db_order_data_session)
 
 SessionDepOrderInfo = Annotated[AsyncSession, Depends(db_order_info.get_session)]
 SessionDepOrderData = Annotated[AsyncSession, Depends(db_order_data.get_session)]
+
+
+@app.websocket("/ws/orders/")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    clients.append(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+    except Exception:
+        clients.remove(websocket)
+
+
+async def notify_clients(order_data):
+    for client in clients:
+        await client.send_text(order_data)
 
 
 @app.get(
@@ -122,6 +140,24 @@ async def get_order(
     order_data = await DBDataOperations(db_order_data_operator).get_order_data(order_id)
 
     return {**vars(order_info), **vars(order_data)}
+
+
+@app.put(
+    "/orders/info/{order_id}",
+    tags=["Заказы"],
+    summary="Изменить статус конкретного заказа",
+)
+async def put_new_order_status(
+    order_id: int,
+    order_status: str,
+    db_order_info_operator: SessionDepOrderInfo,
+):
+    if await DBInfoOperations(db_order_info_operator).change_order_status(
+        order_id, order_status
+    ):
+        return {"ok": True, "msg": "Order status was changed"}
+    else:
+        raise HTTPException(status_code=400, detail="Failed to change order status")
 
 
 async def main():
