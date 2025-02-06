@@ -1,5 +1,5 @@
 import asyncio
-from typing import Annotated
+from typing import List, Any
 
 from fastapi import FastAPI, HTTPException, Depends, WebSocket
 
@@ -10,7 +10,7 @@ from models import OrderSchema
 import uvicorn
 
 from db_init import DBInit, OrderInfoModel, OrderDataModel
-from db_operations import DBInfoOperations, DBDataOperations
+from db_operations import DBInfoRepository, DBDataRepository
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-clients = []
+clients: List[Any] = []
 
 origins = [
     settings.BASE_URL_1,
@@ -34,18 +34,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-db_order_info = DBInit(settings.BD_ORDER_INFO_NAME)
-db_order_data = DBInit(settings.BD_ORDER_DATA_NAME)
+db = DBInit(settings.DB_NAME)
 
-db_order_info_session = db_order_info.get_session()
-db_order_data_session = db_order_data.get_session()
-
-db_order_info_operator = DBInfoOperations(db_order_info_session)
-db_order_data_operator = DBDataOperations(db_order_data_session)
-
-SessionDepOrderInfo = Annotated[AsyncSession, Depends(db_order_info.get_session)]
-SessionDepOrderData = Annotated[AsyncSession, Depends(db_order_data.get_session)]
-
+db_order_info_operator = DBInfoRepository(db.session)
+db_order_data_operator = DBDataRepository(db.session)
 
 @app.websocket("/ws/orders/")
 async def websocket_endpoint(websocket: WebSocket):
@@ -68,10 +60,7 @@ async def notify_clients(order_data):
     tags=["Заказы"],
     summary="Получить ифнормацию о всех заказах",
 )
-async def get_all_orders(
-    db_order_info_operator: SessionDepOrderInfo,
-    db_order_data_operator: SessionDepOrderData,
-):
+async def get_all_orders():
     query = select(OrderInfoModel)
     result_1 = await db_order_info_operator.execute(query)
 
@@ -92,12 +81,10 @@ async def get_all_orders(
 @app.post("/orders/info", tags=["Заказы"], summary="Добавить заказ")
 async def add_order(
     order: OrderSchema,
-    db_order_info_operator: SessionDepOrderInfo,
-    db_order_data_operator: SessionDepOrderData,
 ):
-    if await DBInfoOperations(db_order_info_operator).add_order_info(
+    if await DBInfoRepository(db_order_info_operator).add_order_info(
         order
-    ) and await DBDataOperations(db_order_data_operator).add_order_data(order):
+    ) and await DBDataRepository(db_order_data_operator).add_order_data(order):
         return {"ok": True, "msg": "Order was created"}
     else:
         raise HTTPException(status_code=400, detail="Failed to create order")
@@ -110,10 +97,8 @@ async def add_order(
 )
 async def get_user_orders(
     user_tg_id: int,
-    db_order_info_operator: SessionDepOrderInfo,
-    db_order_data_operator: SessionDepOrderData,
 ):
-    orders_info_list, orders_data_list = await DBDataOperations(
+    orders_info_list, orders_data_list = await DBDataRepository(
         db_order_data_operator
     ).get_orders_data_info(user_tg_id, db_order_info_operator)
 
@@ -133,11 +118,9 @@ async def get_user_orders(
 )
 async def get_order(
     order_id: int,
-    db_order_info_operator: SessionDepOrderInfo,
-    db_order_data_operator: SessionDepOrderData,
 ):
-    order_info = await DBInfoOperations(db_order_info_operator).get_order_info(order_id)
-    order_data = await DBDataOperations(db_order_data_operator).get_order_data(order_id)
+    order_info = await DBInfoRepository(db_order_info_operator).get_order_info(order_id)
+    order_data = await DBDataRepository(db_order_data_operator).get_order_data(order_id)
 
     return {**vars(order_info), **vars(order_data)}
 
@@ -150,22 +133,18 @@ async def get_order(
 async def put_new_order_status(
     order_id: int,
     order_status: str,
-    db_order_info_operator: SessionDepOrderInfo,
 ):
-    if await DBInfoOperations(db_order_info_operator).change_order_status(
+    try:
+        await DBInfoRepository(db_order_info_operator).change_order_status()
         order_id, order_status
-    ):
         return {"ok": True, "msg": "Order status was changed"}
-    else:
-        raise HTTPException(status_code=400, detail="Failed to change order status")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to change order status: {e}")
 
 
 async def main():
     # await db_order_info.drop_database()
-    await db_order_info.setup_database()
-
-    # await db_order_data.drop_database()
-    await db_order_data.setup_database()
+    await db.setup_database()
 
 
 if __name__ == "__main__":
