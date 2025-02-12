@@ -188,6 +188,7 @@ class DBComponentRepository(Generic[M]):
 
         return wrapper
 
+    @connection
     async def create(
         self, comp_info: ComponentSchema, session: AsyncSession = None
     ) -> M:
