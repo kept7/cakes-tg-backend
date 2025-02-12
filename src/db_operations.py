@@ -1,137 +1,260 @@
-from datetime import datetime
-from typing import List, Optional, Tuple
+import datetime
 
-from fastapi import HTTPException
-from sqlalchemy import select
+from typing import Callable, Coroutine, Any, TypeVar, Sequence, Generic
+
+from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-from db_init import OrderInfoModel, OrderDataModel
-from models import OrderSchema
+from models.models import UserModel, OrderModel, ComponentModel
+from models.schemes import UserOrderSchema, ComponentSchema, UserSchema
 
 
-# get user orders
-# @hadrizi
-# user_model = get(id="@hadrizi")
-# if not user_model:
-#   return {}
-
-# creating
-# @hadrizi cake
-# user_model = get_or_create(id="@hadrizi")
-# order_model = OrderModel(user_id=user_model.id, **cake)
-
-# CRUD
-# C - CREATE
-# R - READ
-# U - UPDATE
-# D - DELETE
-# https://en.wikipedia.org/wiki/Create,_read,_update_and_delete
-
-# create  = CREATE
-# get(id) = READ
-# update  = UPDATE
-# delete  = DELETE
-# exist
-# mb you aint gonna need it
-# get_or_create(id) -> UserModel, bool
-# list/get_all
-# bulk_update/bulk_delete(list[id], update_data)
-# get_by_user_id(user_id)
+R = TypeVar("R")
+M = TypeVar("M")
 
 
 class DBUserRepository:
     def __init__(self, session: async_sessionmaker[AsyncSession]):
         self.session = session
 
-    async def add(self, order: OrderSchema) -> None:
-        async with self.session() as session:
-            new_order_info = OrderInfoModel(
-                tg_id=order.tg_id,
-                tg_username=order.tg_username,
-                status=order.status,
-            )
-            session.add(new_order_info)
-            await session.commit()
+    def connection(
+        self, method: Callable[..., Coroutine[Any, Any, R]]
+    ) -> Callable[..., Coroutine[Any, Any, R]]:
+        async def wrapper(*args: Any, **kwargs: Any) -> R:
+            async with self.session() as session:
+                try:
+                    return await method(*args, session=session, **kwargs)
+                except Exception as e:
+                    await session.rollback()
+                    raise e
 
-    async def get_orders_info(self, user_tg_id: int) -> List[OrderInfoModel]:
-        async with self.session() as session:
-            query = select(OrderInfoModel).filter(OrderInfoModel.tg_id == user_tg_id)
-            result = await session.execute(query)
-            orders_info_list = result.scalars().all()
+        return wrapper
 
-            # TODO remove HTTPException from repos
-            if not orders_info_list:
-                raise HTTPException(status_code=404, detail="Orders not found")
-            return orders_info_list
+    @connection
+    async def create(
+        self, user_info: UserSchema, session: AsyncSession = None
+    ) -> UserModel:
+        new_user = UserModel(
+            id=user_info.tg_id,
+            username=user_info.tg_username,
+        )
+        session.add(new_user)
+        await session.commit()
+        return new_user
 
-    async def get_order_info(self, order_id: int) -> Optional[OrderInfoModel]:
-        async with self.session() as session:
-            query = select(OrderInfoModel).filter(OrderInfoModel.order_id == order_id)
-            result = await session.execute(query)
-            order_info = result.scalars().first()
+    @connection
+    async def get(
+        self, user_id: UserOrderSchema.tg_id, session: AsyncSession = None
+    ) -> UserModel | None:
+        query = select(UserModel).filter_by(id=user_id)
+        res = await session.execute(query)
+        return res.scalars().one_or_none()
 
-            if not order_info:
-                raise HTTPException(status_code=404, detail="Order not found")
-            return order_info
+    @connection
+    async def update(
+        self,
+        user_id: UserOrderSchema.tg_id,
+        username: UserOrderSchema.tg_username,
+        session: AsyncSession = None,
+    ) -> None:
+        stmt = update(UserModel).values(username=username).filter_by(id=user_id)
+        await session.execute(stmt)
+        await session.commit()
 
-    async def change_order_status(self, order_id, order_status) -> None:
-        async with self.session() as session:
-            order_info: OrderInfoModel = await self.get_order_info(order_id)
+    @connection
+    async def delete(
+        self, user_id: UserOrderSchema.tg_id, session: AsyncSession = None
+    ) -> None:
+        stmt = delete(UserModel).filter_by(id=user_id)
+        await session.execute(stmt)
+        await session.commit()
 
-            order_info.status = order_status
-            await session.commit()
-            await session.refresh(order_info)
+    @connection
+    async def get_or_create(
+        self, user_info: UserSchema, session: AsyncSession = None
+    ) -> UserModel:
+        user = self.get(user_info.tg_id, session)
+        if user is None:
+            user = await self.create(user_info.tg_id, user_info.tg_username, session)
+        return user
+
+    @connection
+    async def get_by_username(
+        self, username: UserModel.username, session: AsyncSession = None
+    ) -> UserModel | None:
+        query = select(UserModel).filter_by(username=username)
+        res = await session.execute(query)
+        return res.scalars().one_or_none()
+
+    @connection
+    async def get_all(self, session: AsyncSession = None) -> Sequence[UserModel]:
+        query = select(UserModel)
+        res = await session.execute(query)
+        return res.scalars().all()
 
 
-class DBDataRepository:
+class DBOrderRepository:
     def __init__(self, session: async_sessionmaker[AsyncSession]):
         self.session = session
 
-    async def add_order_data(self, order: OrderSchema) -> bool:
-        async with self.session() as session:
-            new_order_data = OrderDataModel(
-                type=order.type,
-                shape=order.shape,
-                filling=order.filling,
-                confi=order.confi,
-                design=order.design,
-            )
-            session.add(new_order_data)
-            await session.commit()
-            return True
+    def connection(
+        self, method: Callable[..., Coroutine[Any, Any, R]]
+    ) -> Callable[..., Coroutine[Any, Any, R]]:
+        async def wrapper(*args: Any, **kwargs: Any) -> R:
+            async with self.session() as session:
+                try:
+                    return await method(*args, session=session, **kwargs)
+                except Exception as e:
+                    await session.rollback()
+                    raise e
 
-    async def get_orders_data_info(
-        self, user_tg_id: int, db_order_info_operator
-    ) -> Tuple[List[OrderInfoModel], List[OrderDataModel]]:
-        async with self.session() as session:
-            orders_info_list = await DBInfoRepository(
-                db_order_info_operator
-            ).get_orders_info(user_tg_id)
+        return wrapper
 
-            query = select(OrderDataModel)
-            result = await session.execute(query)
+    @connection
+    async def create(
+        self, order: UserOrderSchema, session: AsyncSession = None
+    ) -> OrderModel:
+        new_order = OrderModel(
+            user_id=order.tg_id,
+            type_id=order.type_id,
+            shape_id=order.shape_id,
+            flavour_id=order.flavour_id,
+            confit_id=order.confit_id,
+            comment=order.comment,
+            status="created",
+            created=datetime.datetime.now(),
+        )
+        session.add(new_order)
+        await session.commit()
+        return new_order
 
-            result_list = result.scalars().all()
-            orders_data_list = []
+    @connection
+    async def get(
+        self, order_id: OrderModel.id, session: AsyncSession = None
+    ) -> OrderModel | None:
+        query = select(OrderModel).filter_by(id=order_id)
+        res = await session.execute(query)
+        return res.scalars().one_or_none()
 
-            for order_info in orders_info_list:
-                for order_data in result_list:
-                    if order_info.order_id == order_data.order_id:
-                        orders_data_list.append(order_data)
+    @connection
+    async def update(
+        self,
+        order_id: OrderModel.id,
+        order_status: OrderModel.status,
+        session: AsyncSession = None,
+    ) -> None:
+        stmt = update(OrderModel).values(status=order_status).filter_by(id=order_id)
+        await session.execute(stmt)
+        await session.commit()
 
-            # order_data_dict = {order_data.order_id: order_data for order_data in order_data_list}
-            #
-            # orders_data_list = [order_data_dict[order_info.order_id] for order_info in orders_info_list if
-            #                     order_info.order_id in order_data_dict]
+    @connection
+    async def delete(
+        self, order_id: OrderModel.id, session: AsyncSession = None
+    ) -> None:
+        stmt = delete(OrderModel).filter_by(id=order_id)
+        await session.execute(stmt)
+        await session.commit()
 
-            return orders_info_list, orders_data_list
+    @connection
+    async def get_by_user_id(
+        self, user_id: UserModel.id, session: AsyncSession = None
+    ) -> Sequence[OrderModel]:
+        query = select(OrderModel).filter_by(user_id=user_id)
+        res = await session.execute(query)
+        return res.scalars().all()
 
-    async def get_order_data(self, order_id: int) -> Optional[OrderDataModel]:
-        async with self.session() as session:
-            query = select(OrderDataModel).filter(OrderDataModel.order_id == order_id)
-            result = await session.execute(query)
-            order_data = result.scalars().first()
+    @connection
+    async def get_all(self, session: AsyncSession = None) -> Sequence[OrderModel]:
+        query = select(OrderModel)
+        res = await session.execute(query)
+        return res.scalars().all()
 
-            if order_data is None:
-                raise HTTPException(status_code=404, detail="Order data doesn't exist")
-            return order_data
+
+class DBComponentRepository(Generic[M]):
+    def __init__(self, comp_model: type[M], session: async_sessionmaker[AsyncSession]):
+        self.session = session
+        self.CompModel = comp_model
+
+    def connection(
+        self, method: Callable[..., Coroutine[Any, Any, R]]
+    ) -> Callable[..., Coroutine[Any, Any, R]]:
+        async def wrapper(*args: Any, **kwargs: Any) -> R:
+            async with self.session() as session:
+                try:
+                    return await method(*args, session=session, **kwargs)
+                except Exception as e:
+                    await session.rollback()
+                    raise e
+
+        return wrapper
+
+    async def create(
+        self, comp_info: ComponentSchema, session: AsyncSession = None
+    ) -> M:
+        new_comp = self.CompModel(
+            name=comp_info.name, disc=comp_info.disc, available="no"
+        )
+        session.add(new_comp)
+        await session.commit()
+        return new_comp
+
+    @connection
+    async def get(
+        self, comp_id: ComponentModel.id, session: AsyncSession = None
+    ) -> M | None:
+        query = select(self.CompModel).filter_by(id=comp_id)
+        res = await session.execute(query)
+        return res.scalars().one_or_none()
+
+    @connection
+    async def update(
+        self,
+        comp_id: ComponentModel.id,
+        comp_avail: ComponentModel.available,
+        session: AsyncSession = None,
+    ) -> None:
+        stmt = update(self.CompModel).values(available=comp_avail).filter_by(id=comp_id)
+        await session.execute(stmt)
+        await session.commit()
+
+    @connection
+    async def delete(
+        self, comp_id: ComponentModel.id, session: AsyncSession = None
+    ) -> None:
+        stmt = delete(self.CompModel).filter_by(id=comp_id)
+        await session.execute(stmt)
+        await session.commit()
+
+    @connection
+    async def get_or_create(
+        self, comp_info: ComponentSchema, session: AsyncSession = None
+    ) -> M:
+        comp = await self.get(comp_info.name, session)
+        if comp is None:
+            comp = await self.create(comp_info, session)
+        return comp
+
+    @connection
+    async def get_all(self, session: AsyncSession = None) -> Sequence[M]:
+        query = select(self.CompModel)
+        res = await session.execute(query)
+        return res.scalars().all()
+
+    @connection
+    async def get_by_name(
+        self, comp_name: ComponentModel.name, session: AsyncSession = None
+    ) -> M | None:
+        query = select().filter_by(name=comp_name)
+        res = await session.execute(query)
+        return res.scalars().one_or_none()
+
+    @connection
+    async def update_disc(
+        self,
+        comp_name: ComponentModel.name,
+        comp_disc: ComponentModel.disc,
+        session: AsyncSession = None,
+    ) -> None:
+        stmt = update(self.CompModel).values(disc=comp_disc).filter_by(name=comp_name)
+        await session.execute(stmt)
+        await session.commit()

@@ -28,6 +28,17 @@ class Base(DeclarativeBase):
     }
 
 
+class ComponentModel(Base):
+    __abstract__ = True
+
+    id: Mapped[int_pk]
+
+    name: Mapped[str_64]
+    disc: Mapped[str_512]
+
+    available: Mapped[data_avail]
+
+
 class UserModel(Base):
     __tablename__ = "user"
 
@@ -35,7 +46,7 @@ class UserModel(Base):
     username: Mapped[str] = mapped_column(String, nullable=True)
 
 
-class OrderDataModel(Base):
+class OrderModel(Base):
     __tablename__ = "order_data"
 
     id: Mapped[int_pk]
@@ -62,45 +73,17 @@ class OrderDataModel(Base):
     )
 
 
-class TypeDataModel(Base):
+class TypeModel(ComponentModel):
     __tablename__ = "type_data"
 
-    id: Mapped[int_pk]
 
-    type: Mapped[str_64]
-    disc: Mapped[str_512]
-
-    available: Mapped[data_avail]
-
-
-class ShapeDataModel(Base):
+class ShapeModel(ComponentModel):
     __tablename__ = "shape_data"
 
-    id: Mapped[int_pk]
 
-    shape: Mapped[str_64]
-    disc: Mapped[str_512]
-
-    available: Mapped[data_avail]
-
-
-class FlavourDataModel(Base):
+class FlavourModel(ComponentModel):
     __tablename__ = "flavour_data"
 
-    id: Mapped[int_pk]
 
-    flavour: Mapped[str_64]
-    disc: Mapped[str_512]
-
-    available: Mapped[data_avail]
-
-
-class ConfitDataModel(Base):
+class ConfitModel(ComponentModel):
     __tablename__ = "confit_data"
-
-    id: Mapped[int_pk]
-
-    confit: Mapped[str_64]
-    disc: Mapped[str_512]
-
-    available: Mapped[data_avail]

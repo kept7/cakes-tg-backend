@@ -1,11 +1,11 @@
 import asyncio
 from typing import List, Any
 
-from fastapi import FastAPI, HTTPException, Depends, WebSocket
+from fastapi import FastAPI, HTTPException, WebSocket
 
 from settings.config import settings
 
-from models import OrderSchema
+from models.schemes import UserOrderSchema
 
 import uvicorn
 
@@ -13,7 +13,6 @@ from db_init import DBInit, OrderInfoModel, OrderDataModel
 from db_operations import DBInfoRepository, DBDataRepository
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -38,6 +37,7 @@ db = DBInit(settings.DB_NAME)
 
 db_order_info_operator = DBInfoRepository(db.session)
 db_order_data_operator = DBDataRepository(db.session)
+
 
 @app.websocket("/ws/orders/")
 async def websocket_endpoint(websocket: WebSocket):
@@ -80,7 +80,7 @@ async def get_all_orders():
 
 @app.post("/orders/info", tags=["Заказы"], summary="Добавить заказ")
 async def add_order(
-    order: OrderSchema,
+    order: UserOrderSchema,
 ):
     if await DBInfoRepository(db_order_info_operator).add_order_info(
         order
@@ -139,7 +139,9 @@ async def put_new_order_status(
         order_id, order_status
         return {"ok": True, "msg": "Order status was changed"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to change order status: {e}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to change order status: {e}"
+        )
 
 
 async def main():
