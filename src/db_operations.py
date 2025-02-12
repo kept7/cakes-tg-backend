@@ -8,10 +8,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from db_init import OrderInfoModel, OrderDataModel
 from models import OrderSchema
 
-# class DBOperationsInit:
-#     def __init__(self, session: AsyncSession):
-#         self.session = session
-
 
 # get user orders
 # @hadrizi
@@ -41,6 +37,8 @@ from models import OrderSchema
 # list/get_all
 # bulk_update/bulk_delete(list[id], update_data)
 # get_by_user_id(user_id)
+
+
 class DBUserRepository:
     def __init__(self, session: async_sessionmaker[AsyncSession]):
         self.session = session
