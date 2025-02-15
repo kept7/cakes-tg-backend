@@ -71,11 +71,11 @@ class DBUserRepository:
 
     @connection
     async def get_or_create(
-        self, user_info: UserSchema, session: AsyncSession = None
+        self, order: UserOrderSchema, session: AsyncSession = None
     ) -> UserModel:
-        user = self.get(user_info.tg_id, session)
+        user = self.get(order.user.tg_id, session)
         if user is None:
-            user = await self.create(user_info.tg_id, user_info.tg_username, session)
+            user = await self.create(order.user.tg_id, order.user.tg_username, session)
         return user
 
     @connection
@@ -163,7 +163,7 @@ class DBOrderRepository:
 
 
 class DBComponentRepository(Generic[M]):
-    def __init__(self, comp_model: type[M], session: async_sessionmaker[AsyncSession]):
+    def __init__(self, session: async_sessionmaker[AsyncSession], comp_model: type[M]):
         self.session = session
         self.CompModel = comp_model
 

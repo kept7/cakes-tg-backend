@@ -1,24 +1,19 @@
 import asyncio
-from typing import List, Any
+import uvicorn
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from settings.config import settings
 
-from models.schemes import UserOrderSchema
+from models.models import TypeModel, ShapeModel, FlavourModel, ConfitModel, data_avail
+from models.schemes import UserOrderSchema, UserSchema, ComponentSchema
 
-import uvicorn
+from db_init import DB
+from db_operations import DBUserRepository, DBOrderRepository, DBComponentRepository
 
-from db_init import DBInit, OrderInfoModel, OrderDataModel
-from db_operations import DBInfoRepository, DBDataRepository
-
-from sqlalchemy import select
-
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
-
-clients: List[Any] = []
 
 origins = [
     settings.BASE_URL_1,
@@ -33,115 +28,188 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-db = DBInit(settings.DB_NAME)
+db = DB(settings.DB_NAME)
 
-db_order_info_operator = DBInfoRepository(db.session)
-db_order_data_operator = DBDataRepository(db.session)
-
-
-@app.websocket("/ws/orders/")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    clients.append(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-    except Exception:
-        clients.remove(websocket)
-
-
-async def notify_clients(order_data):
-    for client in clients:
-        await client.send_text(order_data)
+db_user = DBUserRepository(db.session)
+db_order = DBOrderRepository(db.session)
+db_components_type = DBComponentRepository(db.session, TypeModel)
+db_components_shape = DBComponentRepository(db.session, ShapeModel)
+db_components_flavour = DBComponentRepository(db.session, FlavourModel)
+db_components_confit = DBComponentRepository(db.session, ConfitModel)
 
 
 @app.get(
-    "/orders/info",
+    "/user/{user_id}",
+    tags=["Пользователи"],
+    summary="Получить ифнормацию о пользователе",
+)
+async def get_user(
+    user_id: UserSchema.tg_id,
+):
+    res = await db_user.get(user_id)
+    if res is None:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+    else:
+        return res
+
+
+@app.put(
+    "/user/{user_id}",
+    tags=["Пользователи"],
+    summary="Изменить никнейм пользователя",
+)
+async def update_username(
+    user_id: UserSchema.tg_id,
+    username: UserSchema.tg_username,
+):
+    try:
+        await db_user.update(user_id, username)
+        return {"ok": True, "msg": "Username was changed"}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Failed to change username: {e}")
+
+
+@app.delete(
+    "/user/{user_id}",
+    tags=["Пользователи"],
+    summary="Удалить пользователя",
+)
+async def delete_user(user_id: UserSchema.tg_id):
+    try:
+        await db_user.delete(user_id)
+        return {"ok": True, "msg": "User was deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Failed to delete user: {e}")
+
+
+@app.get(
+    "/user/all",
+    tags=["Пользователи"],
+    summary="Получить ифнормацию о пользователях",
+)
+async def get_users():
+    return db_user.get_all()
+
+
+@app.get(
+    "/order/{order_id}",
+    tags=["Заказы"],
+    summary="Получить ифнормацию о заказе",
+)
+async def get_order(
+    order_id: int,
+):
+    res = db_order.get(order_id)
+    if res is None:
+        raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
+    else:
+        return res
+
+
+@app.put(
+    "/order/{order_id}",
+    tags=["Заказы"],
+    summary="Изменить статус заказа",
+)
+async def put_order_status(
+    order_id: int,
+    order_status: str,
+):
+    try:
+        await db_order.update(order_id, order_status)
+        return {"ok": True, "msg": "Order status was changed"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=f"Failed to change order status: {e}"
+        )
+
+
+@app.delete(
+    "/order/{order_id}",
+    tags=["Заказы"],
+    summary="Удалить заказ",
+)
+async def delete_order(
+    order_id: int,
+):
+    try:
+        await db_order.delete(order_id)
+        return {"ok": True, "msg": "Order was deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to delete order: {e}")
+
+
+@app.get(
+    "/order/{user_id}",
+    tags=["Заказы"],
+    summary="Получить заказы по id пользователя",
+)
+async def get_order_by_user_id(
+    user_id: UserSchema.tg_id,
+):
+    return db_order.get_by_user_id(user_id)
+
+
+@app.get(
+    "/order/all",
     tags=["Заказы"],
     summary="Получить ифнормацию о всех заказах",
 )
-async def get_all_orders():
-    query = select(OrderInfoModel)
-    result_1 = await db_order_info_operator.execute(query)
-
-    query_2 = select(OrderDataModel)
-    result_2 = await db_order_data_operator.execute(query_2)
-
-    result = []
-    result_1 = result_1.scalars().all()
-    result_2 = result_2.scalars().all()
-
-    for item1, item2 in zip(result_1, result_2):
-        combined_item = {**vars(item1), **vars(item2)}
-        result.append(combined_item)
-
-    return result
+async def get_orders():
+    return db_order.get_all()
 
 
-@app.post("/orders/info", tags=["Заказы"], summary="Добавить заказ")
+@app.post("/order", tags=["Заказы"], summary="Добавить заказ")
 async def add_order(
     order: UserOrderSchema,
 ):
-    if await DBInfoRepository(db_order_info_operator).add_order_info(
-        order
-    ) and await DBDataRepository(db_order_data_operator).add_order_data(order):
+    if await db_user.get_or_create(order) and await db_order.create(order):
         return {"ok": True, "msg": "Order was created"}
     else:
         raise HTTPException(status_code=400, detail="Failed to create order")
 
 
 @app.get(
-    "/orders/info/user/{user_tg_id}",
-    tags=["Заказы"],
-    summary="Получить информацию о всех заказах конкретного пользователя",
+    "/components/all",
+    tags=["Компоненты"],
+    summary="Получить информацию о компонентах",
 )
-async def get_user_orders(
-    user_tg_id: int,
-):
-    orders_info_list, orders_data_list = await DBDataRepository(
-        db_order_data_operator
-    ).get_orders_data_info(user_tg_id, db_order_info_operator)
-
-    all_orders = []
-
-    for item1, item2 in zip(orders_info_list, orders_data_list):
-        combined_item = {**vars(item1), **vars(item2)}
-        all_orders.append(combined_item)
-
-    return all_orders
+async def get_components():
+    res = [
+        await db_components_type.get_all(),
+        await db_components_shape.get_all(),
+        await db_components_flavour.get_all(),
+        await db_components_confit.get_all(),
+    ]
+    return res
 
 
-@app.get(
-    "/orders/info/order/{order_id}",
-    tags=["Заказы"],
-    summary="Получить информацию о всех заказах конкретного пользователя",
-)
-async def get_order(
-    order_id: int,
-):
-    order_info = await DBInfoRepository(db_order_info_operator).get_order_info(order_id)
-    order_data = await DBDataRepository(db_order_data_operator).get_order_data(order_id)
-
-    return {**vars(order_info), **vars(order_data)}
-
-
+# TODO: fix this route
 @app.put(
-    "/orders/info/{order_id}",
-    tags=["Заказы"],
-    summary="Изменить статус конкретного заказа",
+    "/components/{comp}/{comp_id}",
+    tags=["Компоненты"],
+    summary="Изменить статус компонента",
 )
-async def put_new_order_status(
-    order_id: int,
-    order_status: str,
+async def update_type_avail(
+    comp: ComponentSchema.name,
+    comp_id: int,
+    comp_avail: data_avail,
 ):
     try:
-        await DBInfoRepository(db_order_info_operator).change_order_status()
-        order_id, order_status
-        return {"ok": True, "msg": "Order status was changed"}
+        if comp == "type":
+            await db_components_type.update(comp_id, comp_avail)
+        elif comp == "shape":
+            await db_components_shape.update(comp_id, comp_avail)
+        elif comp == "flavour":
+            await db_components_flavour.update(comp_id, comp_avail)
+        elif comp == "confit":
+            await db_components_confit.update(comp_id, comp_avail)
+        else:
+            raise Exception
+
+        return {"ok": True, "msg": "Availability was changed"}
     except Exception as e:
-        raise HTTPException(
-            status_code=400, detail=f"Failed to change order status: {e}"
-        )
+        raise HTTPException(status_code=400, detail=f"Failed to delete order: {e}")
 
 
 async def main():

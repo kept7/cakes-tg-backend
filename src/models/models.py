@@ -47,7 +47,7 @@ class UserModel(Base):
 
 
 class OrderModel(Base):
-    __tablename__ = "order_data"
+    __tablename__ = "order"
 
     id: Mapped[int_pk]
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("UserModel.id"))
@@ -74,16 +74,16 @@ class OrderModel(Base):
 
 
 class TypeModel(ComponentModel):
-    __tablename__ = "type_data"
+    __tablename__ = "type"
 
 
 class ShapeModel(ComponentModel):
-    __tablename__ = "shape_data"
+    __tablename__ = "shape"
 
 
 class FlavourModel(ComponentModel):
-    __tablename__ = "flavour_data"
+    __tablename__ = "flavour"
 
 
 class ConfitModel(ComponentModel):
-    __tablename__ = "confit_data"
+    __tablename__ = "confit"
