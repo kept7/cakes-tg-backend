@@ -79,14 +79,6 @@ class DBUserRepository:
         return user
 
     @connection
-    async def get_by_username(
-        self, username: UserModel.username, session: AsyncSession = None
-    ) -> UserModel | None:
-        query = select(UserModel).filter_by(username=username)
-        res = await session.execute(query)
-        return res.scalars().one_or_none()
-
-    @connection
     async def get_all(self, session: AsyncSession = None) -> Sequence[UserModel]:
         query = select(UserModel)
         res = await session.execute(query)
@@ -201,9 +193,9 @@ class DBComponentRepository(Generic[M]):
 
     @connection
     async def get(
-        self, comp_id: ComponentModel.id, session: AsyncSession = None
+        self, comp_name: ComponentModel.name, session: AsyncSession = None
     ) -> M | None:
-        query = select(self.CompModel).filter_by(id=comp_id)
+        query = select().filter_by(name=comp_name)
         res = await session.execute(query)
         return res.scalars().one_or_none()
 
@@ -240,14 +232,6 @@ class DBComponentRepository(Generic[M]):
         query = select(self.CompModel)
         res = await session.execute(query)
         return res.scalars().all()
-
-    @connection
-    async def get_by_name(
-        self, comp_name: ComponentModel.name, session: AsyncSession = None
-    ) -> M | None:
-        query = select().filter_by(name=comp_name)
-        res = await session.execute(query)
-        return res.scalars().one_or_none()
 
     @connection
     async def update_disc(
