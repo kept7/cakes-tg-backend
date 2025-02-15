@@ -23,6 +23,6 @@ class UserOrderSchema(BaseModel):
 
 class ComponentSchema(BaseModel):
     name: str = Field(max_length=64)
-    disc: str = Field(max_length=512)
+    desc: str = Field(max_length=512)
 
     model_config = ConfigDict(extra="forbid")

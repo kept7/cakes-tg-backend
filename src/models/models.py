@@ -8,15 +8,37 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 OrderStatus = Literal["created", "finished", "cancelled"]
-DataAvailable = Literal["yes", "no", "deleted"]
+DeliveryStatus = Literal["delivery", "pickup"]
+AvailabilityStatus = Literal["yes", "no", "deleted"]
+Components = Literal["type", "shape", "flavour", "confit"]
 
 str_64 = Annotated[str, 64]
 str_512 = Annotated[str, 512]
 int_pk = Annotated[int, mapped_column(Integer, primary_key=True)]
-data_avail = Annotated[
-    DataAvailable,
+order_status = Annotated[
+    OrderStatus,
     mapped_column(
-        Enum("yes", "no", "deleted", name="data_available_enum"), nullable=False
+        Enum("created", "finished", "cancelled", name="order_status_enum"),
+        nullable=False,
+    ),
+]
+delivery_status = Annotated[
+    DeliveryStatus,
+    mapped_column(
+        Enum("delivery", "pickup", name="delivery_status_enum"), nullable=False
+    ),
+]
+availability_status = Annotated[
+    AvailabilityStatus,
+    mapped_column(
+        Enum("yes", "no", "deleted", name="availability_status_enum"), nullable=False
+    ),
+]
+components = Annotated[
+    AvailabilityStatus,
+    mapped_column(
+        Enum("type", "shape", "flavour", "confit", name="components_enum"),
+        nullable=False,
     ),
 ]
 
@@ -34,9 +56,9 @@ class ComponentModel(Base):
     id: Mapped[int_pk]
 
     name: Mapped[str_64]
-    disc: Mapped[str_512]
+    desc: Mapped[str_512]
 
-    available: Mapped[data_avail]
+    available: Mapped[availability_status]
 
 
 class UserModel(Base):
@@ -63,10 +85,9 @@ class OrderModel(Base):
 
     comment: Mapped[str] = mapped_column(String, nullable=True)
 
-    status: Mapped[OrderStatus] = mapped_column(
-        Enum("created", "finished", "cancelled", name="order_status_enum"),
-        nullable=False,
-    )
+    delivery: Mapped[delivery_status]
+
+    status: Mapped[order_status]
 
     created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

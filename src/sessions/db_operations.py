@@ -5,8 +5,8 @@ from typing import Callable, Coroutine, Any, TypeVar, Sequence, Generic
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-from models.models import UserModel, OrderModel, ComponentModel
-from models.schemes import UserOrderSchema, ComponentSchema, UserSchema
+from ..models.models import UserModel, OrderModel, ComponentModel
+from ..models.schemes import UserOrderSchema, ComponentSchema, UserSchema
 
 
 R = TypeVar("R")
@@ -181,12 +181,8 @@ class DBComponentRepository(Generic[M]):
         return wrapper
 
     @connection
-    async def create(
-        self, comp_info: ComponentSchema, session: AsyncSession = None
-    ) -> M:
-        new_comp = self.CompModel(
-            name=comp_info.name, disc=comp_info.disc, available="no"
-        )
+    async def create(self, comp: ComponentSchema, session: AsyncSession = None) -> M:
+        new_comp = self.CompModel(name=comp.name, disc=comp.disc, available="no")
         session.add(new_comp)
         await session.commit()
         return new_comp
@@ -234,12 +230,12 @@ class DBComponentRepository(Generic[M]):
         return res.scalars().all()
 
     @connection
-    async def update_disc(
+    async def update_desc(
         self,
         comp_name: ComponentModel.name,
-        comp_disc: ComponentModel.disc,
+        comp_desc: ComponentModel.desc,
         session: AsyncSession = None,
     ) -> None:
-        stmt = update(self.CompModel).values(disc=comp_disc).filter_by(name=comp_name)
+        stmt = update(self.CompModel).values(desc=comp_desc).filter_by(name=comp_name)
         await session.execute(stmt)
         await session.commit()
