@@ -3,13 +3,14 @@ import uvicorn
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from settings.config import settings
+from sessions.db_sessions import db
+
 from routers.user_router import router as user_router
 from routers.order_router import router as order_router
 from routers.comp_router import router as comp_router
 
-from settings.config import settings
-
-from sessions.db_sessions import db
 
 app = FastAPI()
 
