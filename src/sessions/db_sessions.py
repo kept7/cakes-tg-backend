@@ -1,7 +1,11 @@
-from ..settings.config import settings
-from db_init import DB
-from db_operations import DBUserRepository, DBOrderRepository, DBComponentRepository
-from ..models.models import (
+from src.settings.config import settings
+from src.sessions.db_init import DB
+from src.sessions.db_operations import (
+    DBUserRepository,
+    DBOrderRepository,
+    DBComponentRepository,
+)
+from src.models.models import (
     TypeModel,
     ShapeModel,
     FlavourModel,

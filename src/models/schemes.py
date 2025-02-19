@@ -12,12 +12,13 @@ class OrderSchema(BaseModel):
     flavour_id: int
     confit_id: int | None
     comment: str | None = Field(max_length=512)
+    delivery: str
 
 
 class UserOrderSchema(BaseModel):
-    user: UserSchema
-    order: OrderSchema
-
+    tg_id: int
+    tg_username: str
+    data: OrderSchema
     model_config = ConfigDict(extra="forbid")
 
 

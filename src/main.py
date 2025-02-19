@@ -4,12 +4,12 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from settings.config import settings
-from sessions.db_sessions import db
+from src.settings.config import settings
+from src.sessions.db_sessions import db
 
-from routers.user_router import router as user_router
-from routers.order_router import router as order_router
-from routers.comp_router import router as comp_router
+from src.routers.user_router import router as user_router
+from src.routers.order_router import router as order_router
+from src.routers.comp_router import router as comp_router
 
 
 app = FastAPI()
@@ -33,10 +33,22 @@ app.include_router(comp_router)
 
 
 async def main():
-    # await db_order_info.drop_database()
+    # await db.drop_database()
     await db.setup_database()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
     uvicorn.run("main:app", reload=True)
+
+''' 
+TODO: 
+    1) при изменении статуса заказа на вариант 
+не предусмотренный валится дб при попытке  получить 
+информацию о заказах. get/order -> 500
+    2) продумать более жёсткую валидацию данных
+и реализовать её
+    3) обработать все ситуации, когда пользователь
+пытается достать какой-то объект, но его нет
+(попытка удалить компонент торта, которого нет в дб)
+'''

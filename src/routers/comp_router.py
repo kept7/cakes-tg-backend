@@ -1,13 +1,13 @@
 from fastapi import APIRouter, HTTPException
 
-from ..sessions.db_sessions import (
+from src.sessions.db_sessions import (
     db_components_type,
     db_components_shape,
     db_components_flavour,
     db_components_confit,
 )
-from ..models.models import components, availability_status
-from ..models.schemes import ComponentSchema
+from src.models.models import components, availability_status
+from src.models.schemes import ComponentSchema
 
 
 router = APIRouter(prefix="/component")
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/component")
     tags=["Компоненты"],
     summary="Получить информацию о компоненте",
 )
-async def get_component(comp: components, comp_name: ComponentSchema.name):
+async def get_component(comp: components, comp_name: str):
     if comp == "type":
         res = await db_components_type.get(comp_name)
     elif comp == "shape":
@@ -34,7 +34,7 @@ async def get_component(comp: components, comp_name: ComponentSchema.name):
 
 
 @router.get(
-    "/all",
+    "",
     tags=["Компоненты"],
     summary="Получить информацию о компонентах",
 )
@@ -96,7 +96,7 @@ async def delete_component(
 
 
 @router.post(
-    "/{comp}",
+    "",
     tags=["Компоненты"],
     summary="Добавить компонент",
 )
@@ -120,9 +120,7 @@ async def add_component(comp: components, component: ComponentSchema):
     tags=["Компоненты"],
     summary="Обновить описание компонента",
 )
-async def update_description(
-    comp: components, comp_name: ComponentSchema.name, comp_desc: ComponentSchema.desc
-):
+async def update_description(comp: components, comp_name: str, comp_desc: str):
     if comp == "type":
         await db_components_type.update_desc(comp_name, comp_desc)
     elif comp == "shape":

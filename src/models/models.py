@@ -35,7 +35,7 @@ availability_status = Annotated[
     ),
 ]
 components = Annotated[
-    AvailabilityStatus,
+    Components,
     mapped_column(
         Enum("type", "shape", "flavour", "confit", name="components_enum"),
         nullable=False,
@@ -72,15 +72,15 @@ class OrderModel(Base):
     __tablename__ = "order"
 
     id: Mapped[int_pk]
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("UserModel.id"))
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id"))
 
-    type_id: Mapped[int] = mapped_column(Integer, ForeignKey("TypeDataModel.id"))
+    type_id: Mapped[int] = mapped_column(Integer, ForeignKey("type.id"))
     shape_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("ShapeDataModel.id"), nullable=True
+        Integer, ForeignKey("shape.id"), nullable=True
     )
-    flavour_id: Mapped[int] = mapped_column(Integer, ForeignKey("FlavourDataModel.id"))
+    flavour_id: Mapped[int] = mapped_column(Integer, ForeignKey("flavour.id"))
     confit_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("ConfitDataModel.id"), nullable=True
+        Integer, ForeignKey("confit.id"), nullable=True
     )
 
     comment: Mapped[str] = mapped_column(String, nullable=True)
